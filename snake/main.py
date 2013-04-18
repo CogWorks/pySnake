@@ -13,6 +13,7 @@ except ImportError:
 from pyglet import image, font, text, clock, resource
 from pyglet.gl import *
 from pyglet.window import key, FPSDisplay
+from pyglet.image import SolidColorImagePattern
 
 import os
 
@@ -276,31 +277,19 @@ class TaskBackground(ColorLayer):
     def __init__(self):
         self.screen = director.get_window_size()
         super(TaskBackground, self).__init__(128,128,128,255,self.screen[0],self.screen[1])
-
-class Square(CocosNode, Polygon):
-
-    def __init__(self, (x, y), width, height, color=(1,1,1,1)):
-        Polygon.__init__(self, Rect(x, y, width, height).getQuad(), color=color)
-        CocosNode.__init__(self)
-        
-    x = property(Polygon.getX, Polygon.setX)
-    y = property(Polygon.getY, Polygon.setY)
-    position = property(Polygon.getLoc, Polygon.setLoc)
-        
-    def draw(self, *args, **kwargs):
-        self.render()
         
 def grid2coord(c, r, cell, pad=1):
         x = (c - .5) * cell + c + pad
         y = (r - .5) * cell + r + pad
         return((x,y))
         
-class GridSquare(Square):
+class GridSquare(Sprite):
     
-    def __init__(self, c, r, size, color=(1,1,1,1)):
+    def __init__(self, c, r, size, opacity=255, color=(255, 255, 255)):
         self.grid_loc = (c, r)
         self.size = size
-        super(GridSquare, self).__init__(grid2coord(c, r, size), size, size, color=color)
+        img = SolidColorImagePattern((255,255,255,255)).create_image(size, size)
+        super(GridSquare, self).__init__(img, position=grid2coord(c, r, size), color=color, opacity=opacity)
         
     def set_grid_loc(self, (c, r)):
         self.grid_loc = (c, r)
@@ -360,22 +349,32 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
             return (-1, 0)
         
     def move_snake_body(self):
-        for i in range(1,len(self.snake))[::-1]:
-            self.snake[i].position = self.snake[i-1].position
-        self.snake[0].set_grid_loc_rel(self.get_move_by())
+        mod = self.get_move_by()
+        c,r = self.snake[0].grid_loc
+        nc = c + mod[0]
+        nr = r + mod[1]
+        if (nc,nr) == self.food.grid_loc:
+            self.remove(self.food)
+            self.snake.insert(1,GridSquare(c, r, self.cell))
+            self.add(self.snake[1])
+            self.spawn_food()
+        else:
+            for i in range(1,len(self.snake))[::-1]:
+                self.snake[i].position = self.snake[i-1].position
+        self.snake[0].set_grid_loc((nc,nr))
         
     def spawn_food(self):
         cont = True
         while cont:
             cont = False
-            x = (choice(range(0, self.board_size)) + .5) * self.cell
-            y = (choice(range(0, self.board_size)) + .5) * self.cell
+            c = (choice(range(0, self.ncells)) + 1)
+            r = (choice(range(0, self.ncells)) + 1)
             for s in self.snake:
-                if s.position == (x,y):
+                if s.grid_loc == (c,r):
                     cont = True
                     break
             if not cont:
-                self.food = Square(x, y, self.cell, self.cell, color=(1,0,0,1))
+                self.food = GridSquare(c, r, self.cell, color=(255, 0, 0))
                 self.add(self.food)
         
     def on_enter(self):
@@ -389,6 +388,8 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
         for r in range(1, 3):
             self.snake.append(GridSquare(center, center-r, self.cell))
             self.add(self.snake[-1])
+            
+        self.spawn_food()
             
         self.snake[0].do(Repeat(CallFunc(self.move_snake_body) + Delay(.1)))
         
