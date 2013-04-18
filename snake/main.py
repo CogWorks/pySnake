@@ -345,6 +345,20 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
         else:
             self.snake[0].do(self.movement_queue.pop())
         
+    def spawn_food(self):
+        cont = True
+        while cont:
+            cont = False
+            x = (choice(range(0, self.board_size)) + .5) * self.cell
+            y = (choice(range(0, self.board_size)) + .5) * self.cell
+            for s in self.snake:
+                if s.position == (x,y):
+                    cont = True
+                    break
+            if not cont:
+                self.food = Square(x, y, self.cell, self.cell, color=(1,0,0,1))
+                self.add(self.food)
+        
     def on_enter(self):
         if isinstance(director.scene, TransitionScene): return        
         super(Task, self).on_enter()
