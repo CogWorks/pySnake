@@ -271,15 +271,15 @@ class BackgroundLayer(Layer):
         super(BackgroundLayer, self).__init__()
         self.screen = director.get_window_size()
 
-class TaskBackground(Layer):
+class TaskBackground(ColorLayer):
     
     def __init__(self):
-        super(TaskBackground, self).__init__()
         self.screen = director.get_window_size()
+        super(TaskBackground, self).__init__(128,128,128,255,self.screen[0],self.screen[1])
 
 class Square(CocosNode, Polygon):
 
-    def __init__(self, x, y, width, height, color=(1,1,1,1)):
+    def __init__(self, (x, y), width, height, color=(1,1,1,1)):
         Polygon.__init__(self, Rect(x, y, width, height).getQuad(), color=color)
         CocosNode.__init__(self)
         
@@ -289,7 +289,26 @@ class Square(CocosNode, Polygon):
         
     def draw(self, *args, **kwargs):
         self.render()
-            
+        
+def grid2coord(c, r, cell, pad=1):
+        x = (c - .5) * cell + c + pad
+        y = (r - .5) * cell + r + pad
+        return((x,y))
+        
+class GridSquare(Square):
+    
+    def __init__(self, c, r, size, color=(1,1,1,1)):
+        self.grid_loc = (c, r)
+        self.size = size
+        super(GridSquare, self).__init__(grid2coord(c, r, size), size, size, color=color)
+        
+    def set_grid_loc(self, (c, r)):
+        self.grid_loc = (c, r)
+        self.position = grid2coord(c, r, self.size)
+        
+    def set_grid_loc_rel(self, (c, r)):
+        self.set_grid_loc((self.grid_loc[0]+c, self.grid_loc[1]+r))
+        
 class MoveWithCallback(MoveBy):
     
     def init(self, delta, cb):
@@ -319,31 +338,31 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
     
     def __init__(self, client, actr):
         self.screen = director.get_window_size()
-        super(Task, self).__init__(168, 168, 168, 255, self.screen[1], self.screen[1])
-        self.position = ((self.screen[0] - self.screen[1]) / 2, 0)
+        self.ncells = 41
+        self.cell = int(self.screen[1] / self.ncells * .1) * 10
+        width = self.ncells * self.cell + self.ncells + 1
+        
+        super(Task, self).__init__(0, 0, 0, 255, width, width)
+        self.position = ((self.screen[0]-width)/2, (self.screen[1]-width)/2)
+        
         self.state = self.STATE_INIT
-        self.cell = self.screen[1] / 30
         self.snake = []
         self.movement_direction = 1
         
     def get_move_by(self):
         if self.movement_direction == 1:
-            return (0, self.cell)
+            return (0, 1)
         elif self.movement_direction == 2:
-            return (self.cell, 0)
+            return (1, 0)
         elif self.movement_direction == 3:
-            return (0, -self.cell)
+            return (0, -1)
         elif self.movement_direction == 4:
-            return (-self.cell, 0)
+            return (-1, 0)
         
     def move_snake_body(self):
-        slen = len(self.snake)
-        for i in range(1,slen)[::-1]:
+        for i in range(1,len(self.snake))[::-1]:
             self.snake[i].position = self.snake[i-1].position
-        if len(self.movement_queue) == 1:
-            self.snake[0].do(self.movement_queue[0])
-        else:
-            self.snake[0].do(self.movement_queue.pop())
+        self.snake[0].set_grid_loc_rel(self.get_move_by())
         
     def spawn_food(self):
         cont = True
@@ -363,15 +382,15 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
         if isinstance(director.scene, TransitionScene): return        
         super(Task, self).on_enter()
         
-        self.snake = [Square(self.screen[1]/2, self.screen[1]/2, self.cell, self.cell)]
+        center = int(self.ncells/2) + 1
+        self.snake = [GridSquare(center, center, self.cell)]
         self.add(self.snake[0])
         
-        for _ in range(0, 4):
-            self.snake.append(Square(self.snake[-1].x, self.snake[-1].y - self.cell, self.cell, self.cell))
+        for r in range(1, 3):
+            self.snake.append(GridSquare(center, center-r, self.cell))
             self.add(self.snake[-1])
             
-        self.movement_queue = deque([Delay(.1) + MoveWithCallback(self.get_move_by(), lambda: self.move_snake_body())])
-        self.snake[0].do(self.movement_queue[0])
+        self.snake[0].do(Repeat(CallFunc(self.move_snake_body) + Delay(.1)))
         
     def on_exit(self):
         if isinstance(director.scene, TransitionScene): return
@@ -446,7 +465,6 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
         elif symbol == key.LEFT:
             if self.movement_direction == 1 or self.movement_direction == 3:
                 self.movement_direction = 4
-        self.movement_queue.appendleft(Delay(.1) + MoveWithCallback(self.get_move_by(), lambda: self.move_snake_body()))
                     
 class ACTRScrim(ColorLayer):
     
