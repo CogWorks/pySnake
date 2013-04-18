@@ -271,12 +271,28 @@ class BackgroundLayer(Layer):
     def __init__(self):
         super(BackgroundLayer, self).__init__()
         self.screen = director.get_window_size()
+        img = resource.image('background.jpg')
+        if self.screen[0] > 1600:
+            scale = max(self.screen[0]/1600,self.screen[1]/1000)
+        elif self.screen[0] < 1600:
+            scale = min(self.screen[0]/1600,self.screen[1]/1000)
+        s = Sprite(img,position=(self.screen[0]/2,self.screen[1]/2),scale=scale)
+        self.add(s)
+        self.add(ColorLayer(0,0,0,128),z=1)
 
-class TaskBackground(ColorLayer):
+class TaskBackground(Layer):
     
     def __init__(self):
         self.screen = director.get_window_size()
-        super(TaskBackground, self).__init__(128,128,128,255,self.screen[0],self.screen[1])
+        super(TaskBackground, self).__init__()
+        img = resource.image('background.jpg')
+        if self.screen[0] > 1600:
+            scale = max(self.screen[0]/1600,self.screen[1]/1000)
+        elif self.screen[0] < 1600:
+            scale = min(self.screen[0]/1600,self.screen[1]/1000)
+        s = Sprite(img,position=(self.screen[0]/2,self.screen[1]/2),scale=scale)
+        self.add(s)
+        self.add(ColorLayer(128,128,128,128),z=1)
         
 def grid2coord(c, r, cell, pad=1):
         x = (c - .5) * cell + c + pad
