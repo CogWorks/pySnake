@@ -323,21 +323,21 @@ class MoveWithCallback(MoveBy):
     def start(self):
         MoveBy.start(self)
         self.cb()
-
+    
 class Task(ColorLayer, pyglet.event.EventDispatcher):
     
     d = Dispatcher()
     actr_d = JNI_Dispatcher()
     
     states = ["INIT", "WAIT_ACTR_CONNECTION", "WAIT_ACTR_MODEL", "CALIBRATE", 
-              "IGNORE_INPUT", "PLAY", "RESULTS"]
+              "IGNORE_INPUT", "PLAY", "GAME_OVER"]
     STATE_INIT = 0
     STATE_WAIT_ACTR_CONNECTION = 1
     STATE_WAIT_ACTR_MODEL = 2
     STATE_CALIBRATE = 3
     STATE_IGNORE_INPUT = 4
     STATE_PLAY = 5
-    STATE_RESULTS = 6
+    STATE_GAME_OVER = 6
     
     is_event_handler = True
     
@@ -351,8 +351,19 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
         self.position = ((self.screen[0]-width)/2, (self.screen[1]-width)/2)
         
         self.state = self.STATE_INIT
-        self.snake = []
-        self.movement_direction = 1
+        
+        self.snake = None
+        self.food = None
+        
+        self.text_batch = BatchNode()
+        self.game_over_label = text.Label("GAME OVER", font_size=int(self.cell*4),
+                                          x= width / 2, y= width / 2, font_name="Pipe Dream",
+                                          color=(255,255,255,255), anchor_x='center', anchor_y='bottom',
+                                          batch=self.text_batch.batch)
+        self.game_over_label = text.Label("Press Spacebar For New Game", font_size=int(self.cell*2),
+                                          x= width / 2, y= width / 2, font_name="Pipe Dream",
+                                          color=(255,255,255,255), anchor_x='center', anchor_y='top',
+                                          batch=self.text_batch.batch)
         
     def get_move_by(self):
         if self.movement_direction == 1:
@@ -374,10 +385,29 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
             self.snake.insert(1,GridSquare(c, r, self.cell))
             self.add(self.snake[1])
             self.spawn_food()
+        elif nc < 1 or nc > self.ncells or nr < 1 or nr > self.ncells:
+            self.game_over()
+            return
         else:
             for i in range(1,len(self.snake))[::-1]:
-                self.snake[i].position = self.snake[i-1].position
+                self.snake[i].set_grid_loc(self.snake[i-1].grid_loc)
         self.snake[0].set_grid_loc((nc,nr))
+        for i in range(1,len(self.snake)):
+            if self.snake[0].grid_loc == self.snake[i].grid_loc:
+                self.game_over()
+                return
+        self.snake[0].do(Delay(.1) + CallFunc(self.move_snake_body))
+        self.ready = True
+        
+    def game_over(self):
+        self.state = self.STATE_GAME_OVER
+        self.snake[0].stop()
+        self.ready = False
+        if self.snake:
+            map(self.remove, self.snake)
+        if self.food:
+            self.remove(self.food)
+        self.add(self.text_batch, z=1)
         
     def spawn_food(self):
         cont = True
@@ -393,9 +423,8 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
                 self.food = GridSquare(c, r, self.cell, color=(255, 0, 0))
                 self.add(self.food)
         
-    def on_enter(self):
-        if isinstance(director.scene, TransitionScene): return        
-        super(Task, self).on_enter()
+    def reset(self):
+        self.movement_direction = 1
         
         center = int(self.ncells/2) + 1
         self.snake = [GridSquare(center, center, self.cell)]
@@ -406,8 +435,14 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
             self.add(self.snake[-1])
             
         self.spawn_food()
-            
-        self.snake[0].do(Repeat(CallFunc(self.move_snake_body) + Delay(.1)))
+        
+        self.state = self.STATE_PLAY
+        self.snake[0].do(Delay(2) + CallFunc(self.move_snake_body))
+        
+    def on_enter(self):
+        if isinstance(director.scene, TransitionScene): return        
+        super(Task, self).on_enter()
+        self.reset()
         
     def on_exit(self):
         if isinstance(director.scene, TransitionScene): return
@@ -470,18 +505,25 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
         pass
         
     def on_key_press(self, symbol, modifiers):
-        if symbol == key.UP:
-            if self.movement_direction == 2 or self.movement_direction == 4:
-                self.movement_direction = 1
-        elif symbol == key.DOWN:
-            if self.movement_direction == 2 or self.movement_direction == 4:
-                self.movement_direction = 3
-        elif symbol == key.RIGHT:
-            if self.movement_direction == 1 or self.movement_direction == 3:
-                self.movement_direction = 2
-        elif symbol == key.LEFT:
-            if self.movement_direction == 1 or self.movement_direction == 3:
-                self.movement_direction = 4
+        if self.state == self.STATE_PLAY:
+            if self.ready:
+                self.ready = False
+                if symbol == key.UP:
+                    if self.movement_direction == 2 or self.movement_direction == 4:
+                        self.movement_direction = 1
+                elif symbol == key.DOWN:
+                    if self.movement_direction == 2 or self.movement_direction == 4:
+                        self.movement_direction = 3
+                elif symbol == key.RIGHT:
+                    if self.movement_direction == 1 or self.movement_direction == 3:
+                        self.movement_direction = 2
+                elif symbol == key.LEFT:
+                    if self.movement_direction == 1 or self.movement_direction == 3:
+                        self.movement_direction = 4
+        elif self.state == self.STATE_GAME_OVER:
+            if symbol == key.SPACE:
+                self.remove(self.text_batch)
+                self.reset()
                     
 class ACTRScrim(ColorLayer):
     
