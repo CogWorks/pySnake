@@ -355,6 +355,9 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
         self.snake = None
         self.food = None
         
+        self.blop = StaticSource(pyglet.resource.media('blop.mp3'))
+        self.laugh = StaticSource(pyglet.resource.media('laugh.mp3'))
+        
         self.text_batch = BatchNode()
         self.game_over_label = text.Label("GAME OVER", font_size=int(self.cell*4),
                                           x= width / 2, y= width / 2, font_name="Pipe Dream",
@@ -381,6 +384,7 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
         nc = c + mod[0]
         nr = r + mod[1]
         if (nc,nr) == self.food.grid_loc:
+            self.blop.play()
             self.remove(self.food)
             self.snake.insert(1,GridSquare(c, r, self.cell))
             self.add(self.snake[1])
@@ -400,6 +404,7 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
         self.ready = True
         
     def game_over(self):
+        self.laugh.play()
         self.state = self.STATE_GAME_OVER
         self.snake[0].stop()
         self.ready = False
