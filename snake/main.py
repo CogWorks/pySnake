@@ -389,6 +389,7 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
             self.snake.insert(1,GridSquare(c, r, self.cell))
             self.add(self.snake[1])
             self.spawn_food()
+            self.speed = self.speed * .99
         elif nc < 1 or nc > self.ncells or nr < 1 or nr > self.ncells:
             self.game_over()
             return
@@ -400,7 +401,7 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
             if self.snake[0].grid_loc == self.snake[i].grid_loc:
                 self.game_over()
                 return
-        self.snake[0].do(Delay(.1) + CallFunc(self.move_snake_body))
+        self.snake[0].do(Delay(self.speed) + CallFunc(self.move_snake_body))
         self.ready = True
         
     def game_over(self):
@@ -430,6 +431,7 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
         
     def reset(self):
         self.movement_direction = 1
+        self.speed = .1
         
         center = int(self.ncells/2) + 1
         self.snake = [GridSquare(center, center, self.cell)]
