@@ -623,6 +623,7 @@ class SnakeEnvironment(object):
 
         director.set_show_FPS(True)
         director.window.set_fullscreen(False)
+        director.window.set_mouse_visible(False)
         
         if platform.system() != 'Windows':
             director.window.set_icon(pyglet.resource.image('logo.png'))
