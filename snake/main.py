@@ -354,6 +354,7 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
         
         self.snake = None
         self.food = None
+        self.ready = False
         
         self.blop = StaticSource(pyglet.resource.media('blop.mp3'))
         self.laugh = StaticSource(pyglet.resource.media('laugh.mp3'))
@@ -409,10 +410,7 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
         self.state = self.STATE_GAME_OVER
         self.snake[0].stop()
         self.ready = False
-        if self.snake:
-            map(self.remove, self.snake)
-        if self.food:
-            self.remove(self.food)
+        self.clear()
         self.add(self.text_batch, z=1)
         
     def spawn_food(self):
@@ -429,9 +427,19 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
                 self.food = GridSquare(c, r, self.cell, color=(255, 0, 0))
                 self.add(self.food)
         
+    def clear(self):
+        if self.snake:
+            map(self.remove, self.snake)
+            self.snake = None
+        if self.food:
+            self.remove(self.food)
+            self.food = None
+        
     def reset(self):
         self.movement_direction = 1
         self.speed = .1
+        
+        self.clear()
         
         center = int(self.ncells/2) + 1
         self.snake = [GridSquare(center, center, self.cell)]
@@ -447,13 +455,14 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
         self.snake[0].do(Delay(2) + CallFunc(self.move_snake_body))
         
     def on_enter(self):
-        if isinstance(director.scene, TransitionScene): return        
+        if isinstance(director.scene, TransitionScene): return
         super(Task, self).on_enter()
         self.reset()
         
     def on_exit(self):
         if isinstance(director.scene, TransitionScene): return
         super(Task, self).on_exit()
+        self.clear()
         
     if ACTR6:
         @actr_d.listen('connectionMade')
@@ -512,6 +521,10 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
         pass
         
     def on_key_press(self, symbol, modifiers):
+        if self.state < self.STATE_IGNORE_INPUT: return
+        if symbol == key.W and (modifiers & key.MOD_ACCEL):
+            director.scene.dispatch_event("show_intro_scene")
+            True
         if self.state == self.STATE_PLAY:
             if self.ready:
                 self.ready = False
