@@ -37,7 +37,7 @@ class FixationLayer(Layer):
         super(FixationLayer, self).on_enter()
         if isinstance(director.scene, TransitionScene): return
         self.client.addDispatcher(self.d)
-        self.client.startFixationProcessing()
+        self.client.startFixationProcessing(25, 50)
         
     def on_exit(self):
         super(FixationLayer, self).on_exit()

@@ -132,6 +132,7 @@ class OptionsMenu(BetterMenu):
             self.items['eyetracker_ip'].visible = value
             self.items['eyetracker_in_port'].visible = value
             self.items['eyetracker_out_port'].visible = value
+            self.items['fixation_overlay'].visible = value
             
         def on_eyetracker(self, value):
             director.settings['eyetracker'] = value
