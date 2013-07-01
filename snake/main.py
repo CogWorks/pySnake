@@ -457,7 +457,20 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
     def on_enter(self):
         if isinstance(director.scene, TransitionScene): return
         super(Task, self).on_enter()
+        
+        if director.settings['eyetracker']:
+            self.state = self.STATE_CALIBRATE
+            self.dispatch_event("start_calibration", self.calibration_ok, self.calibration_bad)
+        else:
+            self.reset()
+            
+    def calibration_ok(self):
+        self.dispatch_event("stop_calibration")
         self.reset()
+        
+    def calibration_bad(self):
+        self.dispatch_event("stop_calibration")
+        director.scene.dispatch_event("show_intro_scene")
         
     def on_exit(self):
         if isinstance(director.scene, TransitionScene): return
@@ -599,6 +612,7 @@ class SnakeEnvironment(object):
         pyglet.resource.path.append('resources')
         pyglet.resource.reindex()
         pyglet.resource.add_font('Pipe_Dream.ttf')
+        pyglet.resource.add_font('cutouts.ttf')
         
         p = pyglet.window.get_platform()
         d = p.get_default_display()
@@ -627,7 +641,7 @@ class SnakeEnvironment(object):
             director.settings['eyetracker'] = False
             self.client_actr = JNI_Server(self)
             self.listener_actr = reactor.listenTCP(6666, self.client_actr)
-        elif eyetracking:
+        if eyetracking:
             self.client = iViewXClient(director.settings['eyetracker_ip'], int(director.settings['eyetracker_out_port']))
             self.listener = reactor.listenUDP(int(director.settings['eyetracker_in_port']), self.client) 
         
