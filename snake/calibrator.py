@@ -14,7 +14,46 @@ from pyglet.window import key
 
 def clamp(n, minn, maxn):
     return max(min(maxn, n), minn)
+    
+class FixationLayer(Layer):
+    
+    d = Dispatcher()
+    
+    def __init__(self, client):
+        super(FixationLayer, self).__init__()
+        self.client = client
+        
+        self.screen = director.get_window_size()
+        
+        self.font = font.load('Cut Outs for 3D FX', 64)
+        fix_img = self.font.get_glyphs("G")[0].get_texture(True)
+        fix_img.anchor_x = 'center'
+        fix_img.anchor_y = 'center'
+        
+        self.fix = Sprite(fix_img, position=(self.screen[0] / 2, self.screen[1] / 2), color=(255, 255, 0), opacity=0, scale=.75)
+        self.add(self.fix)
+        
+    def on_enter(self):
+        super(FixationLayer, self).on_enter()
+        if isinstance(director.scene, TransitionScene): return
+        self.client.addDispatcher(self.d)
+        self.client.startFixationProcessing()
+        
+    def on_exit(self):
+        super(FixationLayer, self).on_exit()
+        if isinstance(director.scene, TransitionScene): return
+        self.client.removeDispatcher(self.d)
+        self.client.stopFixationProcessing()
+        
+    @d.listen('ET_FIX')
+    def iViewXEvent(self, inResponse):
+        self.fix.set_position(float(inResponse[2]), float(inResponse[3]))
+        self.fix.opacity = 96
 
+    @d.listen('ET_EFX')
+    def iViewXEvent(self, inResponse):
+        self.fix.opacity = 0
+        
 class HeadPositionLayer(Layer):
     
     d = Dispatcher()

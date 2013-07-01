@@ -56,7 +56,7 @@ from odict import OrderedDict
 
 try:
     from pyviewx.client import iViewXClient, Dispatcher
-    from calibrator import CalibrationLayer, HeadPositionLayer
+    from calibrator import CalibrationLayer, HeadPositionLayer, FixationLayer
     eyetracking = True
 except ImportError:
     eyetracking = False
@@ -97,6 +97,7 @@ class OptionsMenu(BetterMenu):
             self.items['eyetracker_ip'] = EntryMenuItem('EyeTracker IP:', self.on_eyetracker_ip, director.settings['eyetracker_ip'])
             self.items['eyetracker_in_port'] = EntryMenuItem('EyeTracker In Port:', self.on_eyetracker_in_port, director.settings['eyetracker_in_port'])
             self.items['eyetracker_out_port'] = EntryMenuItem('EyeTracker Out Port:', self.on_eyetracker_out_port, director.settings['eyetracker_out_port'])
+            self.items['fixation_overlay'] = ToggleMenuItem("Fixation Overlay:", self.on_fixation_overlay, director.settings['fixation_overlay'])
             self.set_eyetracker_extras(director.settings['eyetracker'])
         
         self.create_menu(self.items.values(), zoom_in(), zoom_out())
@@ -144,6 +145,9 @@ class OptionsMenu(BetterMenu):
         
         def on_eyetracker_out_port(self, port):
             director.settings['eyetracker_out_port'] = port
+
+        def on_fixation_overlay(self, overlay):
+            director.settings['fixation_overlay'] = overlay
             
     def on_quit(self):
         self.parent.switch_to(0)
@@ -454,6 +458,10 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
         self.state = self.STATE_PLAY
         self.snake[0].do(Delay(2) + CallFunc(self.move_snake_body))
         
+    def one_time(self):
+        if director.settings['eyetracker'] and director.settings['fixation_overlay']:
+            self.dispatch_event("show_fixation")
+            
     def on_enter(self):
         if isinstance(director.scene, TransitionScene): return
         super(Task, self).on_enter()
@@ -466,6 +474,7 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
             
     def calibration_ok(self):
         self.dispatch_event("stop_calibration")
+        self.one_time()
         self.reset()
         
     def calibration_bad(self):
@@ -476,6 +485,8 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
         if isinstance(director.scene, TransitionScene): return
         super(Task, self).on_exit()
         self.clear()
+        if director.settings['eyetracker'] and director.settings['fixation_overlay']:
+            self.dispatch_event("hide_fixation")
         
     if ACTR6:
         @actr_d.listen('connectionMade')
@@ -629,6 +640,7 @@ class SnakeEnvironment(object):
                              'eyetracker_ip': '127.0.0.1',
                              'eyetracker_out_port': '4444',
                              'eyetracker_in_port': '5555',
+                             'fixation_overlay': False,
                              'player': 'Human',
                              'players': ['Human']}
         
@@ -687,6 +699,7 @@ class SnakeEnvironment(object):
             self.calibrationLayer.register_event_type('hide_headposition')
             self.calibrationLayer.push_handlers(self)
             self.headpositionLayer = HeadPositionLayer(self.client)
+            self.fixationLayer = FixationLayer(self.client)
         
         self.taskLayer.register_event_type('new_trial')
         self.taskLayer.push_handlers(self.taskBackgroundLayer)
@@ -694,6 +707,8 @@ class SnakeEnvironment(object):
         self.taskLayer.register_event_type('stop_calibration')
         self.taskLayer.register_event_type('show_headposition')
         self.taskLayer.register_event_type('hide_headposition')
+        self.taskLayer.register_event_type('show_fixation')
+        self.taskLayer.register_event_type('hide_fixation')
         self.taskLayer.register_event_type('actr_wait_connection')
         self.taskLayer.register_event_type('actr_wait_model')
         self.taskLayer.register_event_type('actr_running')
@@ -733,6 +748,12 @@ class SnakeEnvironment(object):
         
     def hide_headposition(self):
         self.taskScene.remove(self.headpositionLayer)
+        
+    def show_fixation(self):
+        self.taskScene.add(self.fixationLayer, 4)
+        
+    def hide_fixation(self):
+        self.taskScene.remove(self.fixationLayer)
         
     def eyetracker_listen(self, _):
         self.listener = reactor.listenUDP(int(director.settings['eyetracker_in_port']), self.client)
