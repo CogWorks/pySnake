@@ -67,6 +67,9 @@ from cStringIO import StringIO
 import tarfile
 import json
 
+def duplicates(l):
+    return list(set([x for x in l if l.count(x) > 1]))
+
 class OptionsMenu(BetterMenu):
 
     def __init__(self):
@@ -88,10 +91,15 @@ class OptionsMenu(BetterMenu):
         self.font_item_selected['color'] = (0, 0, 255, 255)
         self.font_item_selected['font_size'] = self.screen[1] / 16 * ratio
         
+        self.board_sizes = map(str,range(11, 51, 2))
+        self.speed_factors = map(lambda(x): "%.3f" % x, [x / 1000.0 for x in range(990, 1000, 1)] + [1.000])
+        
         self.items = OrderedDict()
         
         self.items['fps'] = ToggleMenuItem('Show FPS:', self.on_show_fps, director.show_FPS)
         self.items['fullscreen'] = ToggleMenuItem('Fullscreen:', self.on_fullscreen, director.window.fullscreen)
+        self.items['board_size'] = MultipleMenuItem('Board Size:', self.on_board_size, self.board_sizes, self.board_sizes.index(director.settings['board_size']))
+        self.items['speed_factor'] = MultipleMenuItem('Speed Factor:', self.on_speed_factor, self.speed_factors, self.speed_factors.index(director.settings['speed_factor']))
         if eyetracking:
             self.items['eyetracker'] = ToggleMenuItem("EyeTracker:", self.on_eyetracker, director.settings['eyetracker'])
             self.items['eyetracker_ip'] = EntryMenuItem('EyeTracker IP:', self.on_eyetracker_ip, director.settings['eyetracker_ip'])
@@ -115,6 +123,12 @@ class OptionsMenu(BetterMenu):
                             director.settings['eyetracker_out_port'])
         if new_values != self.orig_values:
             director.scene.dispatch_event("eyetracker_info_changed")
+    
+    def on_board_size(self, value):
+        director.settings["board_size"] = value
+        
+    def on_speed_factor(self, value):
+        director.settings["speed_factor"] = value
         
     def on_show_fps(self, value):
         director.show_FPS = value
@@ -316,9 +330,6 @@ class GridSquare(Sprite):
         self.grid_loc = (c, r)
         self.position = grid2coord(c, r, self.size)
         
-    def set_grid_loc_rel(self, (c, r)):
-        self.set_grid_loc((self.grid_loc[0]+c, self.grid_loc[1]+r))
-        
 class MoveWithCallback(MoveBy):
     
     def init(self, delta, cb):
@@ -348,12 +359,14 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
     
     def __init__(self, client, actr):
         self.screen = director.get_window_size()
-        self.ncells = 41
+        self.ncells = int(director.settings['board_size'])
         self.cell = int(self.screen[1] / self.ncells * .1) * 10
         width = self.ncells * self.cell + self.ncells + 1
         
         super(Task, self).__init__(0, 0, 0, 255, width, width)
         self.position = ((self.screen[0]-width)/2, (self.screen[1]-width)/2)
+        
+        self.speed_factor = float(director.settings['speed_factor'])
         
         self.state = self.STATE_INIT
         
@@ -384,30 +397,41 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
         elif self.movement_direction == 4:
             return (-1, 0)
         
-    def move_snake_body(self):
+    def move_snake_body(self, dt):
         mod = self.get_move_by()
         c,r = self.snake[0].grid_loc
         nc = c + mod[0]
         nr = r + mod[1]
-        if (nc,nr) == self.food.grid_loc:
-            self.blop.play()
-            self.remove(self.food)
-            self.snake.insert(1,GridSquare(c, r, self.cell))
-            self.add(self.snake[1])
-            self.spawn_food()
-            self.speed = self.speed * .99
-        elif nc < 1 or nc > self.ncells or nr < 1 or nr > self.ncells:
+        
+        # First check if new head location is out of bounds
+        if nc < 1 or nc > self.ncells or nr < 1 or nr > self.ncells:
             self.game_over()
             return
+        
+        # Now check to see if next cell is food. If it is, make the food location
+        # the new head of the snake.
+        if (nc,nr) == self.food.grid_loc:
+            self.blop.play()
+            self.food.color = (255,255,255)
+            self.snake = [self.food] + self.snake
+            self.spawn_food()
+            self.speed = self.speed * self.speed_factor
+            
+        # Otherwise move snake
         else:
+            # starting at the tail and moving towards the head, move each body
+            # segment to the preceeding body segment location
             for i in range(1,len(self.snake))[::-1]:
                 self.snake[i].set_grid_loc(self.snake[i-1].grid_loc)
-        self.snake[0].set_grid_loc((nc,nr))
-        for i in range(1,len(self.snake)):
-            if self.snake[0].grid_loc == self.snake[i].grid_loc:
+            # finally move the snake head to the new location
+            self.snake[0].set_grid_loc((nc,nr))
+        
+            # Now check to see if there is a body collision
+            if duplicates([tuple(cell.grid_loc) for cell in self.snake]):
                 self.game_over()
                 return
-        self.snake[0].do(Delay(self.speed) + CallFunc(self.move_snake_body))
+        
+        pyglet.clock.schedule_once(self.move_snake_body, self.speed)
         self.ready = True
         
     def game_over(self):
@@ -415,8 +439,8 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
         self.state = self.STATE_GAME_OVER
         self.snake[0].stop()
         self.ready = False
-        self.clear()
-        self.add(self.text_batch, z=1)
+        #self.clear()
+        #self.add(self.text_batch, z=1)
         
     def spawn_food(self):
         cont = True
@@ -457,7 +481,8 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
         self.spawn_food()
         
         self.state = self.STATE_PLAY
-        self.snake[0].do(Delay(2) + CallFunc(self.move_snake_body))
+        pyglet.clock.schedule_once(self.move_snake_body, 2)
+        #self.snake[0].do(Delay(2) + CallFunc(self.move_snake_body))
         
     def one_time(self):
         if director.settings['eyetracker'] and director.settings['fixation_overlay']:
@@ -567,7 +592,7 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
                         self.movement_direction = 4
         elif self.state == self.STATE_GAME_OVER:
             if symbol == key.SPACE:
-                self.remove(self.text_batch)
+                #self.remove(self.text_batch)
                 self.reset()
                     
 class ACTRScrim(ColorLayer):
@@ -641,6 +666,8 @@ class SnakeEnvironment(object):
                              'eyetracker_ip': '127.0.0.1',
                              'eyetracker_out_port': '4444',
                              'eyetracker_in_port': '5555',
+                             'board_size': '31',
+                             'speed_factor': '0.995',
                              'fixation_overlay': False,
                              'player': 'Human',
                              'players': ['Human']}
