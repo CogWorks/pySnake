@@ -92,7 +92,7 @@ class OptionsMenu(BetterMenu):
         self.font_item_selected['font_size'] = self.screen[1] / 16 * ratio
         
         self.board_sizes = map(str,range(11, 51, 2))
-        self.speed_factors = map(lambda(x): "%.3f" % x, [x / 1000.0 for x in range(990, 1000, 1)] + [1.000])
+        self.speed_factors = map(lambda(x): "%.3f" % x, [x / 1000.0 for x in range(750, 1000, 1)] + [1.000])
         
         self.items = OrderedDict()
         
@@ -339,6 +339,23 @@ class MoveWithCallback(MoveBy):
     def start(self):
         MoveBy.start(self)
         self.cb()
+
+class Score(ColorLayer):
+    
+    def __init__(self, width, height, x, y):
+        super(Score, self).__init__(0, 0, 0, 128, width, height)
+        self.position = (x,y)
+        self.text_batch = BatchNode()
+        self.score_label = text.Label("0", font_size=int(height*.9),
+                                          x= width / 2, y= height / 2 + height*.05, font_name="Score Board",
+                                          color=(255,255,255,255), anchor_x='center', anchor_y='center',
+                                          batch=self.text_batch.batch)
+        self.add(self.text_batch)
+        
+    def set_score(self, value):
+        self.score_label.begin_update()
+        self.score_label.text = str(value)
+        self.score_label.end_update()
     
 class Task(ColorLayer, pyglet.event.EventDispatcher):
     
@@ -360,11 +377,17 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
     def __init__(self, client, actr):
         self.screen = director.get_window_size()
         self.ncells = int(director.settings['board_size'])
-        self.cell = int(self.screen[1] / self.ncells * .1) * 10
+        self.scorepad = int(self.screen[1] * .025)
+        self.cell = int((self.screen[1]-self.scorepad) / self.ncells * .1) * 10
+        print self.cell
         width = self.ncells * self.cell + self.ncells + 1
         
         super(Task, self).__init__(0, 0, 0, 255, width, width)
-        self.position = ((self.screen[0]-width)/2, (self.screen[1]-width)/2)
+        self.position = ((self.screen[0]-width)/2, (self.screen[1]-width)/2-self.scorepad)
+        
+        self.score_layer = Score(width, 2*self.scorepad, self.position[0], self.position[1]+width+self.scorepad/2)
+        self.score = 0
+        self.food_eaten = 0
         
         self.speed_factor = float(director.settings['speed_factor'])
         
@@ -378,11 +401,11 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
         self.laugh = StaticSource(pyglet.resource.media('laugh.mp3'))
         
         self.text_batch = BatchNode()
-        self.game_over_label = text.Label("GAME OVER", font_size=int(self.cell*4),
+        self.game_over_label = text.Label("GAME OVER", font_size=int(self.cell*3),
                                           x= width / 2, y= width / 2, font_name="Pipe Dream",
                                           color=(255,255,255,255), anchor_x='center', anchor_y='bottom',
                                           batch=self.text_batch.batch)
-        self.game_over_label = text.Label("Press Spacebar For New Game", font_size=int(self.cell*2),
+        self.game_over_label = text.Label("Press Spacebar For New Game", font_size=int(self.cell*1.5),
                                           x= width / 2, y= width / 2, font_name="Pipe Dream",
                                           color=(255,255,255,255), anchor_x='center', anchor_y='top',
                                           batch=self.text_batch.batch)
@@ -411,6 +434,9 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
         # Now check to see if next cell is food. If it is, make the food location
         # the new head of the snake.
         if (nc,nr) == self.food.grid_loc:
+            self.food_eaten += 1
+            self.score += int(math.ceil((self.food_eaten-1) * 1.5 + 10))
+            self.score_layer.set_score(self.score)
             self.blop.play()
             self.food.color = (255,255,255)
             self.snake = [self.food] + self.snake
@@ -439,8 +465,8 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
         self.state = self.STATE_GAME_OVER
         self.snake[0].stop()
         self.ready = False
-        #self.clear()
-        #self.add(self.text_batch, z=1)
+        self.clear()
+        self.add(self.text_batch, z=1)
         
     def spawn_food(self):
         cont = True
@@ -468,6 +494,9 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
         self.movement_direction = 1
         self.speed = .1
         
+        self.score = 0
+        self.score_layer.set_score(self.score)
+        
         self.clear()
         
         center = int(self.ncells/2) + 1
@@ -482,7 +511,6 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
         
         self.state = self.STATE_PLAY
         pyglet.clock.schedule_once(self.move_snake_body, 2)
-        #self.snake[0].do(Delay(2) + CallFunc(self.move_snake_body))
         
     def one_time(self):
         if director.settings['eyetracker'] and director.settings['fixation_overlay']:
@@ -592,7 +620,7 @@ class Task(ColorLayer, pyglet.event.EventDispatcher):
                         self.movement_direction = 4
         elif self.state == self.STATE_GAME_OVER:
             if symbol == key.SPACE:
-                #self.remove(self.text_batch)
+                self.remove(self.text_batch)
                 self.reset()
                     
 class ACTRScrim(ColorLayer):
@@ -650,6 +678,7 @@ class SnakeEnvironment(object):
         pyglet.resource.reindex()
         pyglet.resource.add_font('Pipe_Dream.ttf')
         pyglet.resource.add_font('cutouts.ttf')
+        pyglet.resource.add_font('scoreboard.ttf')
         
         p = pyglet.window.get_platform()
         d = p.get_default_display()
@@ -667,7 +696,7 @@ class SnakeEnvironment(object):
                              'eyetracker_out_port': '4444',
                              'eyetracker_in_port': '5555',
                              'board_size': '31',
-                             'speed_factor': '0.995',
+                             'speed_factor': '0.990',
                              'fixation_overlay': False,
                              'player': 'Human',
                              'players': ['Human']}
@@ -719,6 +748,7 @@ class SnakeEnvironment(object):
         
         self.taskBackgroundLayer = TaskBackground()
         self.taskLayer = Task(self.client, self.client_actr)
+        self.scoreLayer = self.taskLayer.score_layer
         self.actrScrim = ACTRScrim()
         
         if self.client:
@@ -744,6 +774,7 @@ class SnakeEnvironment(object):
         
         self.taskScene.add(self.taskBackgroundLayer)
         self.taskScene.add(self.taskLayer, 1)
+        self.taskScene.add(self.scoreLayer, 1)
         self.actrScrim.visible = False
         self.taskScene.add(self.actrScrim, 3)
         
